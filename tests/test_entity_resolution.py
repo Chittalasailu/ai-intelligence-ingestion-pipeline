@@ -145,3 +145,26 @@ def test_resolver_review_band_never_auto_merges():
     result = r.resolve("Serra")  # 90.9% vs seeded "Sierra" -- inside the review band
     assert result.canonical_name == "Serra"
     assert result.method == "unmatched-new"
+
+
+def test_resolver_default_threshold_holds_against_a_broader_real_data_sweep():
+    # Follow-up audit, not a bug fix: after raising the threshold to 97,
+    # a full pairwise similarity sweep across all 2,452 distinct canonical
+    # names in the shipped startups+products datasets surfaced 37 pairs
+    # scoring 85%+ that were never merged. These four are additional real,
+    # confirmed-distinct YC companies from that sweep (different one-liner,
+    # different website each) that were NOT part of the original 8-case
+    # audit -- included here so the 97% threshold's robustness is verified
+    # against a wider real-data sample than just the cases that prompted
+    # the fix, not merely re-asserted against the same 8.
+    pairs = [
+        ("Cairns Health", "Cair Health"),   # voice-based health platform vs. healthcare RCM agents
+        ("Claim Health", "Caire Health"),   # post-acute-care revenue platform vs. diagnostics
+        ("OpenRelay", "OpenReplay"),        # AI inference vs. session-replay tooling
+        ("StarSling", "Starling"),          # CI/GitHub Actions runners vs. urine diagnostics
+    ]
+    r = EntityResolver()
+    for name_a, name_b in pairs:
+        result_a = r.resolve(name_a)
+        result_b = r.resolve(name_b)
+        assert result_a.canonical_name != result_b.canonical_name, f"{name_a!r} incorrectly merged with {name_b!r}"

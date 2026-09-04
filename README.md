@@ -3,7 +3,7 @@
 **A production-oriented asynchronous data pipeline for ingesting, validating, enriching, resolving, and exporting AI-ecosystem intelligence — startups, products, research papers, news, and jobs — from legitimate public sources.**
 
 ![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue)
-![Tests](https://img.shields.io/badge/tests-138%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-139%20passing-brightgreen)
 ![Async](https://img.shields.io/badge/io-asyncio%20%2B%20aiohttp-informational)
 ![No fabricated data](https://img.shields.io/badge/data-100%25%20source--traceable-success)
 
@@ -58,7 +58,7 @@ Produced by running this exact code against live sources on 2026-09-04. Every ro
 | Fresh AI news (≤24h, no minimum required) | **31** |
 | Fresh AI jobs (≤24h, no minimum required) | **11** |
 | Entity mapping log (full audit trail) | **2,453** |
-| Automated tests | **138 / 138 passing** |
+| Automated tests | **139 / 139 passing** |
 | Fabricated records | **0** |
 
 News and jobs have no volume target in this project's spec — the requirement is that everything retained is genuinely published within the last 24 hours, which 750 of 761 job postings and most discovered news items did *not* satisfy on the day this was run (see [Reliability](#reliability)). A low count there is the freshness gate working, not a shortfall.
@@ -278,7 +278,7 @@ ai-intelligence-ingestion-pipeline/
 │   │                    checkpoint.py, dedup.py, config.py, logging_setup.py, role_family.py
 │   └── main.py           CLI entrypoint
 │
-├── tests/                16 files, 138 tests
+├── tests/                16 files, 139 tests
 ├── scripts/              export_data.py, build_architecture_pdf.py
 ├── docs/                 GOOGLE_SHEETS_SETUP.md, LIMITATIONS.md, images/
 └── data/                 startups/ products/ research/ jobs/ news/ mappings/
@@ -292,13 +292,13 @@ ai-intelligence-ingestion-pipeline/
 $ pytest -q
 ........................................................................ [ 52%]
 ......................................................................  [100%]
-138 passed, 10 warnings in ~20s
+139 passed, 10 warnings in ~20s
 ```
 
 | Area | Test file(s) |
 |---|---|
 | Date parsing & freshness | `test_freshness.py` |
-| Entity normalization & matching (incl. 8 real false-merge regression cases) | `test_entity_resolution.py` |
+| Entity normalization & matching (incl. 8 real false-merge cases + a broader 2,452-name similarity-sweep audit) | `test_entity_resolution.py` |
 | Schema validation | `test_schemas.py` |
 | Chunking (token budgeting, 413 shrink) | `test_chunking.py` |
 | Retry/backoff/jitter | `test_retry.py` |
@@ -458,7 +458,7 @@ Quality stats (this run):
 | Source code (`src/`) | Complete |
 | README | Complete |
 | Architecture document (`architecture.pdf`, 2 pages) | Complete |
-| Automated tests | 138/138 passing |
+| Automated tests | 139/139 passing |
 | Data exports (CSV + XLSX, 6 tabs) | Complete |
 | Google Sheets exporter (code + credential paths) | Complete — publish blocked on the one-time Google credential step above |
 | Entity mapping log | Complete — 2,453 rows, 0 known false merges remaining |

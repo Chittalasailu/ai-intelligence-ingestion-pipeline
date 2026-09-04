@@ -49,6 +49,39 @@ since the affected records were individually identifiable by source URL).
 state; zero duplicate canonical names remain across either output file as
 of the last export.
 
+### Follow-up audit (did not trust the fix — re-verified it)
+
+A second pass re-checked the fix from first principles instead of assuming
+it held:
+
+- Grouped every row in the entity-mapping log (2,453 rows) by
+  `canonical_name` and counted distinct `raw_name` values per group.
+  Result: **zero** canonical names have more than one distinct raw-name
+  variant, anywhere in the log — not just "no merges among the 8 known
+  cases," but no merges of any kind at all.
+- Confirmed **zero** `method='fuzzy'` rows remain (`unmatched-new`: 2,445,
+  `exact`: 7, `alias`: 1 — all 8 non-trivial exact/alias resolutions were
+  individually reviewed and are correct).
+- Checked `data/startups/startups.csv` and `data/products/products.csv`
+  directly for duplicate canonical names: 1,247 rows / 1,247 distinct
+  names, and 1,717 rows / 1,717 distinct names — zero duplicates in
+  either file.
+- Ran a bulk pairwise similarity sweep (`rapidfuzz.process.cdist`) across
+  all 2,452 distinct canonical names used across both files — 37 pairs
+  scored 85%+ similarity without being merged. Spot-checking the highest
+  ones against the real YC directory confirmed each is a genuinely
+  distinct company (e.g. `OpenRelay` vs `OpenReplay`, `StarSling` vs
+  `Starling`, and two more real companies in the same similarity
+  cluster as the original `Cair Health`/`Caire Health` case —
+  `Cairns Health` and `Claim Health`). None of the 37 reached the 97%
+  auto-merge threshold, and none should have.
+- Four of these additional confirmed-distinct pairs were added to
+  `tests/test_entity_resolution.py` as a further regression case, so the
+  threshold's robustness is now verified against real data beyond just
+  the 8 cases that originally prompted the fix.
+
+No additional false merges were found. The fix holds.
+
 ## Papers with Code is defunct
 
 `config/sources.yaml` doesn't use `paperswithcode.com`'s API. During
