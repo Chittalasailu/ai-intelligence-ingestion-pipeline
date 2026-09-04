@@ -60,8 +60,14 @@ async def run(push_sheets: bool) -> int:
 
     if push_sheets:
         try:
-            url = push_to_google_sheets(tabs, settings.google_service_account_file, settings.google_sheet_id)
+            url, made_public = push_to_google_sheets(tabs, settings.google_service_account_file, settings.google_sheet_id)
             print(f"\nGoogle Sheet updated: {url}")
+            if not made_public:
+                print(
+                    "WARNING: could not set 'anyone with the link can view' on this sheet "
+                    "(the file owner has editors restricted from changing sharing settings). "
+                    "Data was still written to all tabs -- share it manually: Share > General access > Anyone with the link."
+                )
         except SheetsNotConfigured as e:
             print(f"\nGoogle Sheets not configured — skipped: {e}")
             print("See docs/GOOGLE_SHEETS_SETUP.md for the one-time credential setup.")

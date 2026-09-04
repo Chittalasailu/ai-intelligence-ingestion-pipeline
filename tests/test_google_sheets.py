@@ -53,3 +53,48 @@ def test_push_to_google_sheets_raises_not_configured_when_nothing_available(tmp_
             assert False, "expected SheetsNotConfigured"
         except SheetsNotConfigured as e:
             assert "GOOGLE_SHEETS_SETUP.md" in str(e)
+
+
+def test_push_to_google_sheets_shares_publicly_when_using_existing_sheet_id():
+    # Regression: only the client.create() branch used to call .share() --
+    # a spreadsheet supplied via GOOGLE_SHEET_ID (the open_by_key branch,
+    # which is what a service account with no Drive quota of its own must
+    # use) silently kept whatever privacy its human owner left it at, even
+    # though the assignment requires a publicly viewable link either way.
+    fake_spreadsheet = MagicMock()
+    fake_spreadsheet.worksheets.return_value = [MagicMock(title="Sheet1")]
+    fake_client = MagicMock()
+    fake_client.open_by_key.return_value = fake_spreadsheet
+
+    with (
+        patch("src.export.google_sheets._resolve_credentials", return_value=(MagicMock(), "service_account")),
+        patch("gspread.authorize", return_value=fake_client),
+    ):
+        url, made_public = push_to_google_sheets({}, "unused.json", sheet_id="existing-sheet-id")
+
+    fake_client.open_by_key.assert_called_once_with("existing-sheet-id")
+    fake_client.create.assert_not_called()
+    fake_spreadsheet.share.assert_called_once_with(None, perm_type="anyone", role="reader")
+    assert made_public is True
+
+
+def test_push_to_google_sheets_continues_when_sharing_is_rejected_by_owner():
+    # Regression: some file owners restrict editors (including this service
+    # account) from changing sharing settings on a file they don't own --
+    # gspread surfaces that as an APIError from .share(). That must not
+    # abort the run: the tabs are the primary deliverable and should still
+    # get written, with the caller told sharing needs a manual follow-up.
+    fake_spreadsheet = MagicMock()
+    fake_spreadsheet.worksheets.return_value = [MagicMock(title="Sheet1")]
+    fake_spreadsheet.share.side_effect = Exception("APIError: [404]: File not found")
+    fake_client = MagicMock()
+    fake_client.open_by_key.return_value = fake_spreadsheet
+
+    with (
+        patch("src.export.google_sheets._resolve_credentials", return_value=(MagicMock(), "service_account")),
+        patch("gspread.authorize", return_value=fake_client),
+    ):
+        url, made_public = push_to_google_sheets({}, "unused.json", sheet_id="existing-sheet-id")
+
+    assert made_public is False
+    assert url == fake_spreadsheet.url

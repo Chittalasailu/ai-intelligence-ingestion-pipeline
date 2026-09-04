@@ -3,11 +3,11 @@
 **A production-oriented asynchronous data pipeline for ingesting, validating, enriching, resolving, and exporting AI-ecosystem intelligence — startups, products, research papers, news, and jobs — from legitimate public sources.**
 
 ![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue)
-![Tests](https://img.shields.io/badge/tests-139%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-141%20passing-brightgreen)
 ![Async](https://img.shields.io/badge/io-asyncio%20%2B%20aiohttp-informational)
 ![No fabricated data](https://img.shields.io/badge/data-100%25%20source--traceable-success)
 
-[Repository](https://github.com/chittalasailu/ai-intelligence-ingestion-pipeline) · [Architecture Document (PDF)](architecture.pdf) · [Limitations](docs/LIMITATIONS.md) · [Google Sheets Setup](docs/GOOGLE_SHEETS_SETUP.md)
+[Repository](https://github.com/chittalasailu/ai-intelligence-ingestion-pipeline) · [Live Google Sheet](https://docs.google.com/spreadsheets/d/1_4GTqUc0yMM3DBjQQNQjFsYgj5ihFbFIjrjFj2qnAug/edit) · [Architecture Document (PDF)](architecture.pdf) · [Limitations](docs/LIMITATIONS.md) · [Google Sheets Setup](docs/GOOGLE_SHEETS_SETUP.md)
 
 There is no CI badge here because no CI workflow is configured in this repository — every number on this page comes from actually running the code locally and reading the output, not from an automated pipeline. That distinction matters more here than usual: see [Data Quality](#data-quality).
 
@@ -58,7 +58,7 @@ Produced by running this exact code against live sources on 2026-09-04. Every ro
 | Fresh AI news (≤24h, no minimum required) | **31** |
 | Fresh AI jobs (≤24h, no minimum required) | **11** |
 | Entity mapping log (full audit trail) | **2,453** |
-| Automated tests | **139 / 139 passing** |
+| Automated tests | **141 / 141 passing** |
 | Fabricated records | **0** |
 
 News and jobs have no volume target in this project's spec — the requirement is that everything retained is genuinely published within the last 24 hours, which 750 of 761 job postings and most discovered news items did *not* satisfy on the day this was run (see [Reliability](#reliability)). A low count there is the freshness gate working, not a shortfall.
@@ -278,7 +278,7 @@ ai-intelligence-ingestion-pipeline/
 │   │                    checkpoint.py, dedup.py, config.py, logging_setup.py, role_family.py
 │   └── main.py           CLI entrypoint
 │
-├── tests/                16 files, 139 tests
+├── tests/                16 files, 141 tests
 ├── scripts/              export_data.py, build_architecture_pdf.py
 ├── docs/                 GOOGLE_SHEETS_SETUP.md, LIMITATIONS.md, images/
 └── data/                 startups/ products/ research/ jobs/ news/ mappings/
@@ -292,7 +292,7 @@ ai-intelligence-ingestion-pipeline/
 $ pytest -q
 ........................................................................ [ 52%]
 ......................................................................  [100%]
-139 passed, 10 warnings in ~20s
+141 passed, 10 warnings in ~19s
 ```
 
 | Area | Test file(s) |
@@ -309,7 +309,7 @@ $ pytest -q
 | Bounded concurrency & failure isolation | `test_crawler_base.py` |
 | LLM fallback chain (mocked HTTP: success, 429 exhaustion, 413 shrink, no-provider) | `test_llm_orchestrator.py` |
 | GitHub star lookup + caching | `test_github_stars.py` |
-| Google Sheets credential resolution (service account + ADC) | `test_google_sheets.py` |
+| Google Sheets credential resolution + public-sharing behavior (incl. the open-by-key sharing regression) | `test_google_sheets.py` |
 | Real SQLite round-trip (datetime types, dedup constraints) | `test_repository.py` |
 | Full pipeline flow against a mocked arXiv response | `test_pipeline_integration.py` |
 
@@ -420,11 +420,13 @@ Stated plainly — nothing here is hidden, and nothing below was worked around b
 **Implemented and verified:**
 - Async crawling, checkpointing, retries, freshness gating, schema validation, entity resolution, CSV/XLSX export — all exercised against live sources, all covered by tests that were run, not just written.
 - Startups (1,247), Products (1,717), and Research Papers (1,005) all clear their 1,000-record targets with real, source-traceable data.
+- **Google Sheets export is live**: [the spreadsheet](https://docs.google.com/spreadsheets/d/1_4GTqUc0yMM3DBjQQNQjFsYgj5ihFbFIjrjFj2qnAug/edit) contains all 6 required tabs — **Startups** (1,247), **Products** (1,717), **Research Papers** (1,005), **Jobs** (11), **News** (31), **Entity Mapping Log** (2,453) — populated from this exact database via a GCP service account, each verified read-back row-for-row against the live database with matching headers, and confirmed publicly viewable via an unauthenticated request (no Google session, no API key) that received the sheet directly with no sign-in redirect.
 
 **Implemented, but with an external dependency this environment couldn't satisfy:**
 - **No live LLM provider was ever called.** No `GEMINI_API_KEY`/`GROQ_API_KEY`/`DEEPSEEK_API_KEY` exists in this environment, so every run in `data/` used the deterministic fallback paths (`product_pricing.classify_from_text`, `role_family.classify_role_family`). The orchestration code itself is real and covered by `test_llm_orchestrator.py` (429 exhaustion + fallback, 413 shrink + fallback, no-providers-configured — all against mocked HTTP), but a call to an actual provider endpoint is unverified from here.
 - **GitHub star coverage is rate-limited without a token.** Unauthenticated GitHub API access is 60 requests/hour, shared per IP; a `GITHUB_TOKEN` raises this to 5,000/hour. Papers with a real, declared repo but no fetched star count show an empty `github_stars`, never a guessed number.
-- **Google Sheets requires a one-time Google credential** this environment can't generate on your behalf — either a GCP service-account key or `gcloud auth application-default login` run interactively (Google's OAuth consent step requires a human clicking "Allow" in a real browser; there is no safe way to script past that). The export code supports both credential paths and is tested (`test_google_sheets.py`); see `docs/GOOGLE_SHEETS_SETUP.md` for the exact step.
+
+**A real platform limitation found while wiring up Google Sheets, not by inspection:** a GCP service account under a personal (non-Workspace) Google account has no Drive storage quota of its own, so `client.create()` (creating a brand-new spreadsheet) fails with `403: Drive storage quota exceeded` regardless of code correctness — Google's documented fix is to have the file's actual owner create it and share it with the service account instead, which only exercises the `client.open_by_key()` path. Auditing that path found a real, separate bug: `spreadsheet.share(...)` (needed to make the sheet public) was only ever called on the newly-created-spreadsheet branch, never on the open-by-key branch, so a sheet supplied via `GOOGLE_SHEET_ID` silently kept whatever privacy its owner left it at. Fixed by calling `.share()` unconditionally, with a regression test covering both branches (`test_google_sheets.py`). A second issue surfaced immediately after: that call itself 404'd under the `drive.file` OAuth scope this code originally requested — `drive.file` can read/write a shared file's contents but Drive silently refuses to let it change that file's *permissions*, confirmed by making the identical Drive API call succeed under plain `drive` scope. Fixed by widening the requested scope; see the comment above `_SCOPES` in `src/export/google_sheets.py` for the full diagnosis.
 
 **A real bug found by auditing real output, not by inspection:** entity resolution's fuzzy-match threshold was originally 90%. Auditing every fuzzy match the resolver had ever produced against the actual committed dataset found **8 matches — and all 8 were false merges of genuinely different real companies** (confirmed against their actual websites and one-liners): `Shape`/`Shaped`/`Sharpe`, `Sierra`/`Serra`, `Aluna`/`Alguna`, `Besimple AI`/`Simple AI`, `Lever`/`Clever`, `Tella`/`Trella`, and `Cair Health`/`Caire Health` at 95.65% — above even a first attempted fix of 95%. The threshold is now 97%, chosen with margin above the highest false positive actually observed; all 8 cases are permanent regression tests, and all 8 already-shipped false merges were corrected in the committed data. Full detail, including the reasoning for why precision was prioritized over recall here, is in [docs/LIMITATIONS.md](docs/LIMITATIONS.md).
 
@@ -458,9 +460,9 @@ Quality stats (this run):
 | Source code (`src/`) | Complete |
 | README | Complete |
 | Architecture document (`architecture.pdf`, 2 pages) | Complete |
-| Automated tests | 139/139 passing |
+| Automated tests | 141/141 passing |
 | Data exports (CSV + XLSX, 6 tabs) | Complete |
-| Google Sheets exporter (code + credential paths) | Complete — publish blocked on the one-time Google credential step above |
+| Google Sheets export | Complete — [live public sheet](https://docs.google.com/spreadsheets/d/1_4GTqUc0yMM3DBjQQNQjFsYgj5ihFbFIjrjFj2qnAug/edit), all 6 tabs populated and verified |
 | Entity mapping log | Complete — 2,453 rows, 0 known false merges remaining |
 | Docker Compose (PostgreSQL + pgvector) | Complete |
 

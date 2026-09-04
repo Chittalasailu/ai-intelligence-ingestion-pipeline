@@ -23,7 +23,18 @@ from src.utils.logging_setup import get_logger
 
 logger = get_logger(__name__)
 
-_SCOPES = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive.file"]
+_SCOPES = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+# drive.file (rather than the full drive scope) looks like the more
+# privacy-conscious default, but it only covers files the credential's own
+# app created or opened via a picker. A file the owner shared afterwards
+# with the service account's email -- the only path available to a service
+# account with no Drive storage quota of its own -- still lets drive.file
+# read/write the sheet's contents, but Drive silently 404s any attempt to
+# modify that file's permissions (e.g. making it link-public) under that
+# scope. Verified directly against the Drive API: the identical
+# permissions.create call that 404s under drive.file returns 200 under
+# plain drive. Needed for `spreadsheet.share(...)` below to actually work
+# on a shared-not-created file, which is the only case this project uses.
 
 
 class SheetsNotConfigured(Exception):
@@ -65,11 +76,17 @@ def push_to_google_sheets(
     service_account_file: str,
     sheet_id: str = "",
     sheet_title: str = "FrontierAtlas Intelligence Pipeline Output",
-) -> str:
-    """Returns the spreadsheet URL on success. Raises SheetsNotConfigured if
-    neither a service-account file nor Application Default Credentials are
-    available — i.e. neither one-time credential step documented in
-    docs/GOOGLE_SHEETS_SETUP.md has been done yet.
+) -> tuple[str, bool]:
+    """Returns (spreadsheet_url, made_public_by_this_call). Raises
+    SheetsNotConfigured if neither a service-account file nor Application
+    Default Credentials are available — i.e. neither one-time credential
+    step documented in docs/GOOGLE_SHEETS_SETUP.md has been done yet.
+
+    made_public_by_this_call is False (not a raised error) when the sharing
+    API call itself is rejected -- this happens when GOOGLE_SHEET_ID points
+    at a sheet whose owner has restricted editors from changing sharing
+    settings. That's a data point for the caller to surface, not a reason
+    to fail a run that otherwise successfully wrote every tab.
     """
     creds, method = _resolve_credentials(service_account_file)
     if creds is None:
@@ -87,8 +104,20 @@ def push_to_google_sheets(
         spreadsheet = client.open_by_key(sheet_id)
     else:
         spreadsheet = client.create(sheet_title)
-        spreadsheet.share(None, perm_type="anyone", role="reader")
         logger.info("created_new_spreadsheet", url=spreadsheet.url)
+
+    # Required regardless of path: an existing sheet opened via GOOGLE_SHEET_ID
+    # is whatever privacy level its human owner left it at, and the assignment
+    # requires a publicly viewable link either way. Not fatal if rejected --
+    # some file owners restrict editors (including this service account) from
+    # changing sharing settings on a file they don't own; the data push below
+    # is the primary deliverable and must still complete either way.
+    made_public = False
+    try:
+        spreadsheet.share(None, perm_type="anyone", role="reader")
+        made_public = True
+    except Exception as e:  # noqa: BLE001 - gspread raises its own APIError type
+        logger.info("google_sheets_share_rejected", error=str(e))
 
     existing_titles = {ws.title for ws in spreadsheet.worksheets()}
 
@@ -112,4 +141,4 @@ def push_to_google_sheets(
         except Exception:  # noqa: BLE001 - cosmetic cleanup only, never fatal
             pass
 
-    return spreadsheet.url
+    return spreadsheet.url, made_public
