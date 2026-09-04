@@ -3,6 +3,52 @@
 Consolidated detail behind the README's Limitations section — the
 technical "why," for anyone extending this pipeline.
 
+## Fuzzy entity matching: measured, found unreliable, made conservative
+
+Entity resolution's fuzzy-match tier (`rapidfuzz.fuzz.token_sort_ratio`)
+was originally set to a 90% auto-merge threshold. Auditing every fuzzy
+match this resolver ever produced against the real, committed dataset
+turned up 8 matches — and all 8 were false merges of genuinely different
+real companies, confirmed against their actual YC one-liners and websites:
+
+| Raw name | Wrongly merged into | Score | Actually |
+|---|---|---:|---|
+| Shaped | Shape | 90.9% | real-time retrieval engine (shaped.ai) vs. a BI/analytics tool (shape.xyz) |
+| Sharpe | Shape | 90.9% | quant-research agents (sharpe.sh) vs. the same BI tool |
+| Serra | Sierra (seeded) | 90.9% | AI recruiter (serra.io) vs. AI customer-service platform |
+| Aluna | Alguna | 90.9% | biomedical AI data (alunadata.com) vs. CPQ/billing software |
+| Besimple AI | Simple AI | 90.0% | voice-data-for-AI (besimple.ai) vs. AI sales voice agent (usesimple.ai) |
+| Lever | Clever | 90.9% | talent-acquisition ATS (lever.co) vs. classroom-tech platform (clever.com) |
+| Tella | Trella | 90.9% | screen recorder (tella.com) vs. freight/logistics platform (trella.app) |
+| Cair Health | Caire Health | 95.65% | AI healthcare-RCM agents vs. semi-autonomous diagnostics — different companies, different products |
+
+Zero of the 8 were a legitimate same-company typo catch. The pattern is
+structural, not a tuning fluke: a short, common-word company name plus one
+inserted or changed character routinely still scores 90-96% on generic
+string similarity, because the metric has no notion that "Lever" and
+"Clever" are unrelated businesses — it only sees five correct characters
+out of six.
+
+**Fix**: `fuzzy_threshold` default raised to 97 (`src/entity_resolution/resolver.py`),
+chosen to sit above the highest false positive actually observed (95.65%)
+with margin. All 8 cases are now permanent regression tests
+(`tests/test_entity_resolution.py`). `review_threshold` (80), previously
+defined but unused, now does real work: a score between 80 and 97 is
+logged (`entity_resolution_near_match_not_merged`) for visibility instead
+of being silently discarded — the assignment's own stated cost asymmetry
+(an incorrect merge corrupts data; a missed merge just leaves two records
+slightly less consolidated) is why this defaults to precision over recall.
+The 55-entity seed+alias table — not fuzzy matching — is what actually
+carries the "OpenAI, Inc." / "Open AI" canonicalization requirement.
+
+All 8 already-shipped false merges were corrected in the committed
+database and re-exported (a targeted fix — not a full pipeline re-run —
+since the affected records were individually identifiable by source URL).
+`data/mappings/entity_mapping_log.csv` and `data/startups/startups.csv` /
+`data/products/products.csv` in this repository reflect the corrected
+state; zero duplicate canonical names remain across either output file as
+of the last export.
+
 ## Papers with Code is defunct
 
 `config/sources.yaml` doesn't use `paperswithcode.com`'s API. During

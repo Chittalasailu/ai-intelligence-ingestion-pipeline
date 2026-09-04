@@ -22,6 +22,9 @@ from rapidfuzz import fuzz, process
 
 from src.entity_resolution.normalizer import normalize_name
 from src.entity_resolution.seed_data import SEED_STARTUPS
+from src.utils.logging_setup import get_logger
+
+logger = get_logger(__name__)
 
 
 @dataclass
@@ -35,9 +38,29 @@ class EntityResolver:
     def __init__(
         self,
         seed: Optional[dict[str, list[str]]] = None,
-        fuzzy_threshold: float = 90.0,
+        fuzzy_threshold: float = 97.0,
         review_threshold: float = 80.0,
     ):
+        # 97, not 90: measured against this project's own ~2,450 real
+        # resolutions, every fuzzy match rapidfuzz's token_sort_ratio ever
+        # produced at threshold 90 was a false merge of two genuinely
+        # different companies — 8 for 8, including "Cair Health"/"Caire
+        # Health" at 95.65%, "Shape"/"Shaped"/"Sharpe" and "Sierra"/"Serra"
+        # at 90.9%, and four more real pairs (Aluna/Alguna, Besimple AI/
+        # Simple AI, Lever/Clever, Tella/Trella) — see
+        # tests/test_entity_resolution.py and docs/LIMITATIONS.md for the
+        # full list. Zero were legitimate typo catches. That's a precision
+        # problem, not a tuning nuance: a short company name plus one
+        # inserted/changed character routinely still scores 90-96% on
+        # generic string similarity, because the metric has no notion that
+        # "Lever" and "Clever" are unrelated businesses. Given the
+        # assignment's own explicit cost asymmetry (an incorrect merge
+        # corrupts data; a missed merge just leaves two records slightly
+        # less consolidated), fuzzy matching now only auto-merges at
+        # near-identity confidence. The 55-entity seed+alias table, not
+        # fuzzy matching, is what actually carries the "OpenAI, Inc." /
+        # "Open AI" canonicalization requirement — see the exact/alias
+        # tests below, all of which still pass at this threshold.
         self.seed = seed if seed is not None else SEED_STARTUPS
         self.fuzzy_threshold = fuzzy_threshold
         self.review_threshold = review_threshold
@@ -79,6 +102,18 @@ class EntityResolver:
                 if score >= self.fuzzy_threshold:
                     return ResolutionResult(
                         canonical_name=self._all_norms_to_display[matched_norm], method="fuzzy", confidence=float(score)
+                    )
+                if score >= self.review_threshold:
+                    # Below the auto-merge bar but close enough to be worth a
+                    # human glance — logged, never silently auto-merged. This
+                    # is exactly the band real false merges came from (90-96%)
+                    # before fuzzy_threshold was raised; surfacing it instead
+                    # of discarding it is what review_threshold is for.
+                    logger.info(
+                        "entity_resolution_near_match_not_merged",
+                        raw_name=raw_name,
+                        candidate=self._all_norms_to_display[matched_norm],
+                        confidence=round(float(score), 1),
                     )
 
         display = raw_name.strip()
