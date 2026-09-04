@@ -1,0 +1,26 @@
+version: "3.9"
+
+# Production storage target. The demo run (see README) uses the zero-setup
+# SQLite default in .env.example instead — this is what DATABASE_URL should
+# point at once you're past the trial and actually scaling ingestion.
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: frontieratlas-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: frontieratlas
+      POSTGRES_PASSWORD: frontieratlas_dev_only
+      POSTGRES_DB: intelligence_graph
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U frontieratlas"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  postgres_data:

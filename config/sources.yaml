@@ -1,0 +1,99 @@
+# Modular source registry. Add/remove/disable a source here without touching
+# pipeline code — extractors are looked up by `adapter` name at runtime.
+#
+# Every source is a legitimate, publicly documented endpoint (official API,
+# RSS/Atom feed, or a static open dataset). None require bypassing auth walls,
+# CAPTCHAs, or bot protection.
+
+startups:
+  - name: "YC OSS Startup Directory"
+    adapter: "yc_startups"
+    url: "https://yc-oss.github.io/api/companies/all.json"
+    notes: "Community-maintained open mirror of Y Combinator's public company directory. Static JSON, no auth, explicitly published for reuse (github.com/yc-oss/api)."
+
+research_papers:
+  - name: "arXiv API"
+    adapter: "arxiv"
+    base_url: "https://export.arxiv.org/api/query"
+    categories: ["cs.AI", "cs.LG", "cs.CL", "cs.CV", "cs.NE", "stat.ML"]
+    page_size: 100
+    polite_delay_seconds: 3.0
+    notes: "Official arXiv API. Rate-limited politely per arXiv's usage guidelines (one request per ~3s, no parallel hammering)."
+  - name: "Hugging Face Daily Papers"
+    adapter: "hf_daily_papers"
+    url: "https://huggingface.co/api/daily_papers"
+    notes: "Official public HF API surfacing curated/trending papers, many cross-linked with arXiv IDs. Used to enrich coverage, not as sole source."
+
+github_metrics:
+  - name: "GitHub REST API"
+    adapter: "github_stars"
+    base_url: "https://api.github.com"
+    notes: "60 req/hr unauthenticated, 5000 req/hr with GITHUB_TOKEN. Results cached to data/mappings/github_stars_cache.json."
+
+news:
+  # All 5 verified live (HTTP 200) during build. VentureBeat/ScienceDaily are
+  # documented as optional extras below since they 429/rate-limit shared IPs
+  # frequently — the retry+backoff logic in src/utils/retry.py handles them
+  # fine, but they're excluded from the primary 5 for a reliable demo run.
+  - name: "TechCrunch AI"
+    adapter: "rss"
+    url: "https://techcrunch.com/category/artificial-intelligence/feed/"
+  - name: "Ars Technica"
+    adapter: "rss"
+    url: "https://arstechnica.com/feed/"
+    keyword_filter: ["AI", "artificial intelligence", "machine learning", "LLM", "OpenAI", "Anthropic", "Gemini"]
+  - name: "The Verge AI"
+    adapter: "rss"
+    url: "https://www.theverge.com/rss/ai-artificial-intelligence/index.xml"
+  - name: "MIT Technology Review AI"
+    adapter: "rss"
+    url: "https://www.technologyreview.com/topic/artificial-intelligence/feed"
+  - name: "Wired AI"
+    adapter: "rss"
+    url: "https://www.wired.com/feed/tag/ai/latest/rss"
+
+news_optional_extra:
+  - name: "VentureBeat AI"
+    adapter: "rss"
+    url: "https://venturebeat.com/category/ai/feed/"
+    notes: "Frequently returns 429 from shared/cloud IPs. Kept disabled by default; enable if running from a residential IP."
+  - name: "ScienceDaily AI"
+    adapter: "rss"
+    url: "https://www.sciencedaily.com/rss/computers_math/artificial_intelligence.xml"
+
+jobs:
+  # 5 distinct boards verified live during build (HTTP 200). Greenhouse/Lever
+  # tokens are guessed-and-checked per company; wrong tokens 404 harmlessly,
+  # so config changes here never require touching pipeline code.
+  - name: "RemoteOK"
+    adapter: "remoteok"
+    url: "https://remoteok.com/api"
+    keyword_filter: ["ai", "machine learning", "ml", "llm", "data scien"]
+  - name: "WeWorkRemotely (Programming)"
+    adapter: "rss_jobs"
+    url: "https://weworkremotely.com/categories/remote-programming-jobs.rss"
+    keyword_filter: ["ai", "machine learning", "ml engineer", "llm", "data scien"]
+  - name: "Greenhouse - Anthropic"
+    adapter: "greenhouse"
+    board_token: "anthropic"
+    url: "https://boards-api.greenhouse.io/v1/boards/anthropic/jobs?content=true"
+  - name: "Greenhouse - Stability AI"
+    adapter: "greenhouse"
+    board_token: "stabilityai"
+    url: "https://boards-api.greenhouse.io/v1/boards/stabilityai/jobs?content=true"
+  - name: "Greenhouse - Together AI"
+    adapter: "greenhouse"
+    board_token: "togetherai"
+    url: "https://boards-api.greenhouse.io/v1/boards/togetherai/jobs?content=true"
+
+jobs_optional_extra:
+  - name: "Greenhouse - Databricks"
+    adapter: "greenhouse"
+    board_token: "databricks"
+    url: "https://boards-api.greenhouse.io/v1/boards/databricks/jobs?content=true"
+
+products:
+  - name: "YC OSS Startup Directory (product surface)"
+    adapter: "yc_products"
+    url: "https://yc-oss.github.io/api/companies/all.json"
+    notes: "Each active YC company's public site is fetched to classify pricingModel from real page content (see src/extractors/product_pricing.py). No field is guessed — a company is skipped if no confident signal is found."

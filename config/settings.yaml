@@ -1,0 +1,50 @@
+# Non-secret runtime settings. Secrets live in .env (see .env.example).
+crawler:
+  max_concurrency: 25
+  per_host_concurrency: 5
+  request_timeout_seconds: 20
+  max_retries: 4
+  backoff_base_seconds: 1.0
+  backoff_max_seconds: 60.0
+  jitter_seconds: 0.5
+  user_agent: "FrontierAtlasIntelligenceBot/1.0 (+research demo; contact: data-team@example.com)"
+
+targets:
+  startups_min: 1000
+  products_min: 1000
+  research_papers_min: 1000
+  news_sources: 5
+  job_sources: 5
+
+freshness:
+  window_hours: 24
+  # If a source gives no reliable publish timestamp, an item can only be
+  # accepted via the documented heuristic in src/utils/freshness.py, and is
+  # otherwise rejected rather than assumed fresh.
+  allow_heuristic_fallback: true
+
+llm:
+  provider_order: ["gemini", "groq", "deepseek"]
+  max_tokens_per_request: 6000
+  chunk_token_budget: 3500
+  chunk_overlap_tokens: 200
+  max_413_retries: 3
+  max_429_retries: 5
+
+entity_resolution:
+  fuzzy_match_threshold: 90
+  review_threshold: 80
+  algorithm: "token_sort_ratio"
+
+storage:
+  default_url: "sqlite+aiosqlite:///./data/pipeline.db"
+
+export:
+  formats: ["csv", "xlsx"]
+  sheet_tabs:
+    - "Startups"
+    - "Products"
+    - "Research Papers"
+    - "Jobs"
+    - "News"
+    - "Entity Mapping Log"

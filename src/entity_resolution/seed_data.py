@@ -1,0 +1,68 @@
+"""Seed database of known AI startups: canonical name -> known aliases.
+
+This is the "mock database of 50 known AI startups" the assignment asks for.
+All 50+ are real, well-known companies; aliases are real variants that
+actually appear in the wild (legal-entity suffixes, spacing/punctuation
+variants, common abbreviations) so the canonicalization pipeline has
+realistic exact/alias matches to resolve against, not just fuzzy guesses.
+"""
+from __future__ import annotations
+
+SEED_STARTUPS: dict[str, list[str]] = {
+    "OpenAI": ["OpenAI, Inc.", "OpenAI Inc", "Open AI", "openai inc", "OpenAI LP", "OpenAI Global LLC"],
+    "Anthropic": ["Anthropic PBC", "Anthropic, Inc.", "Anthropic Inc"],
+    "Google DeepMind": ["DeepMind", "DeepMind Technologies", "Google Deepmind", "DeepMind Technologies Limited"],
+    "Mistral AI": ["Mistral", "Mistral AI SAS", "MistralAI"],
+    "Cohere": ["Cohere Inc", "Cohere Technologies Inc", "Cohere AI"],
+    "Stability AI": ["StabilityAI", "Stability AI Ltd", "Stability.ai"],
+    "Hugging Face": ["HuggingFace", "Hugging Face, Inc.", "Hugging Face Inc"],
+    "Scale AI": ["Scale", "Scale AI Inc", "ScaleAI"],
+    "Databricks": ["Databricks Inc", "Databricks, Inc."],
+    "xAI": ["X.AI", "xAI Corp", "X Artificial Intelligence"],
+    "Inflection AI": ["Inflection", "Inflection AI Inc"],
+    "Adept AI": ["Adept", "Adept AI Labs", "Adept AI Labs Inc"],
+    "Perplexity AI": ["Perplexity", "Perplexity.ai", "Perplexity AI Inc"],
+    "Runway": ["Runway AI", "Runway AI Inc", "RunwayML"],
+    "ElevenLabs": ["Eleven Labs", "ElevenLabs Inc", "Eleven Labs Inc"],
+    "Character.AI": ["Character AI", "CharacterAI", "Character Technologies Inc"],
+    "Midjourney": ["Midjourney Inc", "Midjourney, Inc."],
+    "Anysphere": ["Cursor", "Anysphere Inc", "Anysphere, Inc. (Cursor)"],
+    "Together AI": ["Together", "Together Computer", "Together AI Inc"],
+    "Fireworks AI": ["Fireworks", "Fireworks AI Inc"],
+    "Groq": ["Groq Inc", "Groq, Inc."],
+    "Cerebras Systems": ["Cerebras", "Cerebras Systems Inc"],
+    "SambaNova Systems": ["SambaNova", "SambaNova Systems Inc"],
+    "Replicate": ["Replicate Inc", "Replicate, Inc."],
+    "LangChain": ["LangChain Inc", "LangChain AI"],
+    "Pinecone": ["Pinecone Systems", "Pinecone Systems Inc"],
+    "Weaviate": ["Weaviate B.V.", "Weaviate BV"],
+    "Qdrant": ["Qdrant Solutions", "Qdrant GmbH"],
+    "Glean": ["Glean Technologies", "Glean Technologies Inc"],
+    "Harvey": ["Harvey AI", "Harvey Technologies Inc"],
+    "Sierra": ["Sierra Platform", "Sierra Technologies Inc"],
+    "Contextual AI": ["Contextual", "Contextual AI Inc"],
+    "Imbue": ["Imbue Inc", "Generally Intelligent"],
+    "Reka AI": ["Reka", "Reka AI Inc"],
+    "AI21 Labs": ["AI21", "AI21 Labs Ltd"],
+    "Aleph Alpha": ["Aleph Alpha GmbH"],
+    "Writer": ["Writer Inc", "Writer, Inc.", "Qordoba"],
+    "Jasper": ["Jasper AI", "Jasper.ai", "Conversion.ai"],
+    "Synthesia": ["Synthesia Ltd", "Synthesia Limited"],
+    "Tabnine": ["Tabnine Inc", "Codota"],
+    "Codeium": ["Windsurf", "Exafunction Inc", "Codeium Inc"],
+    "Sourcegraph": ["Sourcegraph Inc", "Sourcegraph, Inc."],
+    "Vercel": ["Vercel Inc", "ZEIT Inc"],
+    "Suno": ["Suno AI", "Suno Inc"],
+    "Pika": ["Pika Labs", "Pika Inc"],
+    "Luma AI": ["Luma", "Luma Labs", "Luma AI Inc"],
+    "Physical Intelligence": ["Physical Intelligence Inc", "Pi Robotics"],
+    "Skild AI": ["Skild", "Skild AI Inc"],
+    "Figure AI": ["Figure", "Figure Robotics Inc"],
+    "1X Technologies": ["1X", "1X Technologies AS", "Halodi Robotics"],
+    "World Labs": ["World Labs Inc"],
+    "Speak": ["Speak Labs", "Speak AI Inc"],
+    "You.com": ["You", "You.com Inc"],
+    "Poolside": ["Poolside AI", "Poolside Inc"],
+    "Magic": ["Magic AI", "Magic.dev", "Magic Labs Inc"],
+    "Krea AI": ["Krea", "Krea AI Inc"],
+}
