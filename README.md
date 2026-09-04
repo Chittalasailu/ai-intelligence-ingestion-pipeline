@@ -371,7 +371,7 @@ than a bug to paper over.
 |---|---:|---|
 | Startups | 1,247 | YC directory, AI-tagged, real `team_size` where published |
 | Products | 768 | Live company-website pricing classification (1,961 candidate sites fetched; see Limitations) |
-| Research Papers | 1,000 | arXiv + Hugging Face Daily Papers, real GitHub links/stars where evidenced |
+| Research Papers | 1,005 | arXiv + Hugging Face Daily Papers, real GitHub links/stars where evidenced |
 | News | 27 | 5 RSS feeds, strictly ≤24h old |
 | Jobs | 11 | 5 job boards, strictly ≤24h old |
 | Entity Mapping Log | 1,532 | Every resolution performed above |
