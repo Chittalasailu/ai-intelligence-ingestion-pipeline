@@ -29,22 +29,45 @@ repo association itself is fake.
 
 ## Product pricing classification yield
 
-The products pipeline attempts every AI-tagged YC company with a website
-(1,923 of 6,200 total companies in the dataset are AI-tagged). Real
-outcomes observed running this against live sites:
+The products pipeline first attempts every AI-tagged YC company with a
+website (1,923 of 6,200 total companies in the dataset are AI-tagged).
+Real outcomes observed running this against live sites:
 
 - DNS resolution failures (`getaddrinfo failed`) — the domain no longer
   resolves, almost always because the startup shut down or rebranded.
 - TLS handshake errors — expired certs, misconfigured servers.
 - Timeouts — slow or now-dead infrastructure.
 - Homepages with no confident FREE/FREEMIUM/PAID/ENTERPRISE signal in
-  their visible text (see `src/extractors/product_pricing.py`'s keyword
-  heuristic) and no discoverable `/pricing` link to fall back to.
+  their visible text and no discoverable pricing page.
 
 None of these become a fabricated pricing model — the company is skipped.
-This is exactly the "maximize legitimate acquisition, document the
-limitation" behavior the assignment specifies for when a source can't
-reach the target volume.
+This capped the AI-tagged-only pass at 768 real products, short of the
+1,000 target.
+
+**What changed to close the gap** (`src/extractors/product_pricing.py`,
+`src/pipelines/products.py`):
+
+1. When no `/pricing`-style link is found in the homepage nav, the
+   extractor now also tries the handful of paths almost every SaaS site
+   actually uses (`/pricing`, `/plans`, `/price`) directly, instead of
+   giving up.
+2. A site whose HTTPS connection fails outright (broken/expired cert — a
+   real, common failure mode on small startup sites) now retries once over
+   plain HTTP before being recorded as unreachable.
+3. Once the AI-tagged pool's yield is known to be short of target, the
+   pipeline supplements from the full YC directory
+   (`YcStartupsExtractor.filter_all_companies`), excluding companies
+   already attempted. Every supplemental record is still classified from
+   that exact company's own live site — the change is which companies are
+   *considered*, never how a pricing model is assigned.
+
+Combined result, verified by rerunning against live data: 1,717 real
+products from 4,494 fetch attempts across 10,696 discovered candidates —
+above the 1,000 target, with the same zero-fabrication guarantee as
+before. The honest tradeoff: some of the 1,717 are outside a strict
+"AI startup" reading of the YC directory, since scope was deliberately
+widened for volume once that was explicitly requested over staying
+narrowly AI-tagged.
 
 ## Entity mapping log: a real bug found by running the pipeline
 

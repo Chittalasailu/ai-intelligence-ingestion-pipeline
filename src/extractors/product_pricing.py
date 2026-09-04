@@ -94,28 +94,63 @@ def classify_from_text(text: str) -> Optional[PricingModel]:
     return None
 
 
+_GUESSED_PRICING_PATHS = ["/pricing", "/plans", "/price", "/pricing/", "#pricing"]
+
+
 class ProductPricingExtractor:
     def __init__(self, http_client: AsyncHttpClient):
         self.http_client = http_client
 
+    async def _fetch(self, url: str) -> tuple[Optional[str], Optional[str]]:
+        """Returns (html, actual_url_that_succeeded) — actual_url can differ
+        from `url` when the https->http fallback below kicks in, and
+        callers must attribute evidence to whichever URL really produced
+        it, not the one they started with.
+        """
+        status, html, _headers = await self.http_client.fetch(url, max_retries_override=1)
+        if status == 200 and isinstance(html, str):
+            return html, url
+        # A real fraction of small startup sites are misconfigured HTTPS
+        # (expired/self-signed certs, no TLS at all) but still serve plain
+        # HTTP — retrying once there recovers real, legitimate content
+        # instead of just recording the site as unreachable.
+        if url.startswith("https://") and status in (599, 598):
+            http_url = "http://" + url[len("https://") :]
+            alt_status, alt_html, _ = await self.http_client.fetch(http_url, max_retries_override=1)
+            if alt_status == 200 and isinstance(alt_html, str):
+                return alt_html, http_url
+        return None, None
+
     async def classify(self, website_url: str) -> Optional[PricingClassification]:
-        status, home_html, _headers = await self.http_client.fetch(website_url, max_retries_override=1)
-        if status != 200 or not isinstance(home_html, str):
+        home_html, fetched_url = await self._fetch(website_url)
+        if home_html is None or fetched_url is None:
             return None
 
         home_text = extract_visible_text(home_html)
         result = classify_from_text(home_text)
-        fetched_url = website_url
 
         if result is None:
-            pricing_url = find_pricing_link(home_html, website_url)
-            if pricing_url and pricing_url != website_url:
-                p_status, pricing_html, _ = await self.http_client.fetch(pricing_url, max_retries_override=1)
-                if p_status == 200 and isinstance(pricing_html, str):
-                    pricing_text = extract_visible_text(pricing_html)
-                    result = classify_from_text(pricing_text)
-                    fetched_url = pricing_url
+            pricing_url = find_pricing_link(home_html, fetched_url)
+            candidate_urls = [pricing_url] if pricing_url else []
+            # No pricing link found in the nav — try the handful of paths
+            # almost every SaaS site actually uses, rather than giving up.
+            if not candidate_urls:
+                base = fetched_url.rstrip("/")
+                candidate_urls = [base + path for path in _GUESSED_PRICING_PATHS if path != "#pricing"]
+
+            for candidate in candidate_urls:
+                if candidate == fetched_url:
+                    continue
+                pricing_html, candidate_actual_url = await self._fetch(candidate)
+                if pricing_html is None or candidate_actual_url is None:
+                    continue
+                pricing_text = extract_visible_text(pricing_html)
+                candidate_result = classify_from_text(pricing_text)
+                if candidate_result is not None:
+                    result = candidate_result
+                    fetched_url = candidate_actual_url
                     home_text = pricing_text
+                    break
 
         if result is None:
             return None

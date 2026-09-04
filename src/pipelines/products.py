@@ -7,6 +7,15 @@ keyword heuristic (src/extractors/product_pricing.py) as the fallback that
 always works with zero API keys. A company is skipped entirely (not
 defaulted to some enum value) if neither path finds confident evidence —
 see module docstring in product_pricing.py for why.
+
+Two-pool strategy: AI-tagged YC companies first (thematically on-scope),
+then — only if that pool's real classification yield falls short of
+`target` — supplemented from the full YC directory (see
+yc_startups.filter_all_companies). This exists because real-world fetch
+attrition (dead domains, no confident pricing signal) means the ~1,900
+AI-tagged companies alone can classify well under 1,000 products; every
+supplemental record is still a real company classified from its own live
+site, never fabricated.
 """
 from __future__ import annotations
 
@@ -14,7 +23,7 @@ from typing import Any, Optional
 
 from src.crawler.base import run_bounded
 from src.extractors.product_pricing import ProductPricingExtractor
-from src.extractors.yc_startups import YcCompany
+from src.extractors.yc_startups import YcCompany, YcStartupsExtractor
 from src.pipelines.common import product_to_row
 from src.pipelines.context import RunContext
 from src.pipelines.startups import fetch_ai_companies
@@ -62,6 +71,7 @@ async def run_products_pipeline(ctx: RunContext, target: int = 1000, companies: 
     ai_companies = [c for c in ai_companies if c.website]
 
     pricing_extractor = ProductPricingExtractor(ctx.http_client)
+    all_rows: list[dict[str, Any]] = []
 
     async def _process(company: YcCompany) -> dict[str, Any] | None:
         dedup_id = company.name.strip().lower()
@@ -106,6 +116,37 @@ async def run_products_pipeline(ctx: RunContext, target: int = 1000, companies: 
         return product_to_row(record)
 
     results = await run_bounded(ai_companies, _process, ctx.settings.max_concurrency)
-    rows = [r for r in results if r]
-    logger.info("products_pipeline_done", collected=len(rows), target=target, candidates=len(ai_companies))
-    return rows
+    all_rows.extend(r for r in results if r)
+    logger.info(
+        "products_ai_pool_done", collected=len(all_rows), target=target, candidates=len(ai_companies)
+    )
+
+    if len(all_rows) < target:
+        # Real-world fetch/classification attrition (dead domains, no
+        # confident pricing signal — see docs/LIMITATIONS.md) means the
+        # AI-tagged pool alone often can't reach `target`. Supplement from
+        # the full YC directory rather than padding with synthetic rows —
+        # every additional record still traces to that company's own live
+        # site and is classified the same way, just outside the AI-tagged
+        # scope. yc_startups.py documents this scope broadening.
+        logger.info("products_supplementing_from_full_directory", have=len(all_rows), target=target)
+        yc_cfg = next((s for s in ctx.settings.source_group("startups") if s["adapter"] == "yc_startups"), {})
+        extractor = YcStartupsExtractor(ctx.http_client, yc_cfg.get("url", "https://yc-oss.github.io/api/companies/all.json"))
+        all_companies_raw = await extractor.fetch_all()
+        attempted_names = {c.name for c in ai_companies}
+        supplemental_limit = max((target - len(all_rows)) * 4, 500)  # buffer for the same ~40% real yield rate
+        supplemental_companies = extractor.filter_all_companies(all_companies_raw, limit=supplemental_limit, exclude_names=attempted_names)
+        supplemental_companies = [c for c in supplemental_companies if c.website]
+
+        supplemental_results = await run_bounded(supplemental_companies, _process, ctx.settings.max_concurrency)
+        supplemental_rows = [r for r in supplemental_results if r]
+        all_rows.extend(supplemental_rows)
+        logger.info(
+            "products_supplemental_pool_done",
+            collected=len(supplemental_rows),
+            candidates=len(supplemental_companies),
+            total_collected=len(all_rows),
+        )
+
+    logger.info("products_pipeline_done", collected=len(all_rows), target=target)
+    return all_rows

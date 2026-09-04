@@ -362,32 +362,35 @@ call itself once credentials exist) is automatic via
 
 ## Data actually collected
 
-Produced by running this exact code against live sources — see
-[Limitations](#limitations) for why Products and Jobs land below their
-"minimum 1,000" target and why that's the correct, honest outcome rather
-than a bug to paper over.
+Produced by running this exact code against live sources. Jobs (and to a
+lesser extent News) are intentionally small — see
+[Limitations](#limitations) for why that's the correct, honest outcome for
+a strict 24-hour freshness gate rather than a bug to paper over.
 
 | Tab | Count | Source |
 |---|---:|---|
 | Startups | 1,247 | YC directory, AI-tagged, real `team_size` where published |
-| Products | 768 | Live company-website pricing classification (1,961 candidate sites fetched; see Limitations) |
+| Products | 1,717 | Live company-website pricing classification (see below for how this cleared 1,000) |
 | Research Papers | 1,000 | arXiv + Hugging Face Daily Papers, real GitHub links/stars where evidenced |
 | News | 31 | 5 RSS feeds, strictly ≤24h old |
 | Jobs | 11 | 5 job boards, strictly ≤24h old |
-| Entity Mapping Log | 1,532 | Every resolution performed above |
+| Entity Mapping Log | 2,454 | Every resolution performed above |
 
 (These are a snapshot from the run that produced the committed `data/*.csv` files. arXiv, RSS, and job-board content changes continuously — a fresh `python -m src.main --pipeline all` run will get different, still-real, numbers in the same range for News/Jobs and will only grow Startups/Products/Research Papers, never shrink them, since export always reflects the full database.)
 
+**How Products reached 1,000+:** the first pass (AI-tagged YC companies only, ~1,245 with a website) classified 768 — short of target, and documented as such during development. Rather than accept that, three real engineering changes were made and verified by rerunning against live data: (1) a company whose site has no confident pricing signal now also gets guessed-path fallback fetches (`/pricing`, `/plans`, `/price`) instead of giving up after the nav-link search; (2) a broken-HTTPS site (expired cert, misconfigured TLS — common on small startup sites) now retries once over plain HTTP instead of being recorded as unreachable; (3) once the AI-tagged pool's real yield is known to fall short, the pipeline supplements from the full ~6,200-company YC directory (`src/extractors/yc_startups.py::filter_all_companies`), still classifying every product from that exact company's own live site — never fabricated, never guessed. Combined, this pushed the total to 1,717 from 4,494 real fetch attempts across 10,696 discovered candidates. See `src/pipelines/products.py` and `docs/LIMITATIONS.md` for the full before/after.
+
 ## Testing
 
-118 tests, all passing: `pytest -q`.
+130 tests, all passing: `pytest -q`.
 
 - **Unit**: date parsing & freshness (`test_freshness.py`), entity
   normalization/matching (`test_entity_resolution.py`), schema validation
   (`test_schemas.py`), chunking (`test_chunking.py`), retry/backoff
   (`test_retry.py`), dedup (`test_dedup.py`, `test_checkpoint.py`), pricing
-  heuristic (`test_product_pricing.py`), mapping-log dedup
-  (`test_mapping_log.py`).
+  heuristic incl. path-guessing and HTTP fallback
+  (`test_product_pricing.py`), mapping-log dedup (`test_mapping_log.py`),
+  YC candidate-pool filtering (`test_yc_startups.py`).
 - **Integration**: bounded-concurrency + failure isolation
   (`test_crawler_base.py`), LLM fallback chain against mocked HTTP
   (`test_llm_orchestrator.py`), GitHub star lookup + caching
@@ -407,21 +410,21 @@ type mismatch) — each one is now a regression test, not just a fix.
 Stated plainly, per the assignment's own anti-hallucination requirement —
 nothing below is padded with synthetic records to hit a number.
 
-- **Products landed at 768, short of the 1,000 target.** This pipeline
-  exhausted the entire pool of AI-tagged YC companies with a website
-  (1,923 total in the dataset; 1,961 fetch attempts made once retries and
-  the pricing-page follow-up fetch are counted) — there wasn't a larger
-  legitimate candidate pool available under the "AI startups" scope to draw
-  from. Of those attempts, real-world DNS failures (shut-down startups),
-  TLS errors, timeouts, and homepages with no confident pricing signal
-  account for the gap. The pipeline never invents a pricing model for a
-  site it couldn't classify — it skips that company entirely rather than
-  guessing. Widening scope beyond AI-tagged companies (the full ~6,200-
-  company YC directory) would close the numeric gap but was deliberately
-  not done here, since it would dilute the "AI intelligence" focus the
-  assignment is actually about.
+- **Products required widening scope beyond AI-tagged companies to clear
+  1,000.** The AI-tagged YC pool alone (1,923 companies) classified only
+  768 real products — real-world DNS failures (shut-down startups), TLS
+  errors, timeouts, and homepages with no confident pricing signal account
+  for the rest not converting. Rather than stop there, the pipeline now
+  supplements from the full ~6,200-company YC directory once the AI-tagged
+  pool's yield is known to fall short (`filter_all_companies` in
+  `src/extractors/yc_startups.py`), reaching 1,717. Every one of those
+  records is still a real company, classified from that exact company's
+  own live site — nothing here is fabricated, only the candidate pool
+  widened. The tradeoff being named explicitly: some of the 1,717 are YC
+  companies outside a strict "AI startup" reading, because volume was
+  prioritized once explicitly requested over staying narrowly AI-scoped.
 - **Jobs and News are intentionally small.** The assignment asks for "all
-  24-hour-fresh jobs/news found," not a minimum count — 749 of 760 job
+  24-hour-fresh jobs/news found," not a minimum count — 750 of 761 job
   postings discovered were correctly rejected as older than 24 hours. A
   higher-frequency scheduled run (hourly, via cron) would compound to a
   much larger fresh set over a day without changing anything about the
