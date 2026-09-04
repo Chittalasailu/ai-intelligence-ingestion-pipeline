@@ -3,7 +3,7 @@
 **A production-oriented asynchronous data pipeline for ingesting, validating, enriching, resolving, and exporting AI-ecosystem intelligence — startups, products, research papers, news, and jobs — from legitimate public sources.**
 
 ![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue)
-![Tests](https://img.shields.io/badge/tests-141%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-145%20passing-brightgreen)
 ![Async](https://img.shields.io/badge/io-asyncio%20%2B%20aiohttp-informational)
 ![No fabricated data](https://img.shields.io/badge/data-100%25%20source--traceable-success)
 
@@ -58,7 +58,7 @@ Produced by running this exact code against live sources on 2026-09-04. Every ro
 | Fresh AI news (≤24h, no minimum required) | **31** |
 | Fresh AI jobs (≤24h, no minimum required) | **11** |
 | Entity mapping log (full audit trail) | **2,453** |
-| Automated tests | **141 / 141 passing** |
+| Automated tests | **145 / 145 passing** |
 | Fabricated records | **0** |
 
 News and jobs have no volume target in this project's spec — the requirement is that everything retained is genuinely published within the last 24 hours, which 750 of 761 job postings and most discovered news items did *not* satisfy on the day this was run (see [Reliability](#reliability)). A low count there is the freshness gate working, not a shortfall.
@@ -96,7 +96,7 @@ flowchart TD
 
     LLM --> Resolve
 
-    Resolve["Entity Resolution — src/entity_resolution/*<br/>normalize → 55-entity seed/alias exact match → fuzzy match (97% threshold)<br/>full raw→canonical audit log with method + confidence"]
+    Resolve["Entity Resolution — src/entity_resolution/*<br/>normalize → 56-entity seed/alias exact match → fuzzy match (97% threshold)<br/>full raw→canonical audit log with method + confidence"]
 
     Resolve --> Storage
 
@@ -158,7 +158,7 @@ flowchart LR
 
 **Chunking.** `src/utils/chunking.py` strips boilerplate (script/style/nav/footer/ads by tag and class heuristics), locates the main content block, then packs paragraphs into token-budgeted chunks (~4 chars/token estimate) with overlap across boundaries — and always prepends the lead paragraph to every chunk, so a fallback provider that only ever sees chunk 2 still has the headline context.
 
-**Entity resolution.** Unicode NFKD normalize → lowercase → strip punctuation → collapse whitespace → strip a trailing *legal* suffix (Inc/LLC/Corp/GmbH) iteratively — deliberately excluding brand words like "Labs"/"Technologies", since auto-stripping those raises false-merge risk. Exact match against a 55-entity seed+alias table → alias table → fuzzy match (`rapidfuzz.token_sort_ratio`) at a 97% confidence threshold. That threshold is not a guess — see [Trade-offs and Limitations](#trade-offs-and-limitations) for the real false-merge audit that produced it. Every resolution, including "no match, new canonical," is written to an audit log (raw name, canonical name, method, confidence, source URL, timestamp).
+**Entity resolution.** Unicode NFKD normalize → lowercase → strip punctuation → collapse whitespace → strip a trailing *legal* suffix (Inc/LLC/Corp/GmbH) iteratively — deliberately excluding brand words like "Labs"/"Technologies", since auto-stripping those raises false-merge risk. Exact match against a 56-entity seed+alias table → alias table → fuzzy match (`rapidfuzz.token_sort_ratio`) at a 97% confidence threshold. That threshold is not a guess — see [Trade-offs and Limitations](#trade-offs-and-limitations) for the real false-merge audit that produced it. Every resolution, including "no match, new canonical," is written to an audit log (raw name, canonical name, method, confidence, source URL, timestamp).
 
 **Storage.** SQLite for this demo (zero setup, `DATABASE_URL` default) against the exact same SQLAlchemy models that run on PostgreSQL in production (`DATABASE_URL=postgresql+asyncpg://...`, `docker-compose.yml` provisions one with `pgvector` pre-installed). See [Scaling](#scaling-to-500000-records) for why Postgres, and why `pgvector` rather than a separate graph database.
 
@@ -270,7 +270,7 @@ ai-intelligence-ingestion-pipeline/
 │   │                    news_rss.py, product_pricing.py, yc_startups.py
 │   ├── llm/             base.py, providers.py, orchestrator.py, factory.py
 │   ├── entity_resolution/  normalizer.py, resolver.py, seed_data.py, mapping_log.py
-│   ├── pipelines/       one file per vertical + context.py (shared run state)
+│   ├── pipelines/       one file per vertical + context.py (shared run state), common.py (row-flattening helpers)
 │   ├── schemas/         models.py (pydantic), validation.py
 │   ├── storage/         models.py (SQLAlchemy), db.py, repository.py
 │   ├── export/          tabular.py (CSV/XLSX), google_sheets.py
@@ -278,7 +278,7 @@ ai-intelligence-ingestion-pipeline/
 │   │                    checkpoint.py, dedup.py, config.py, logging_setup.py, role_family.py
 │   └── main.py           CLI entrypoint
 │
-├── tests/                16 files, 141 tests
+├── tests/                16 files, 145 tests
 ├── scripts/              export_data.py, build_architecture_pdf.py
 ├── docs/                 GOOGLE_SHEETS_SETUP.md, LIMITATIONS.md, images/
 └── data/                 startups/ products/ research/ jobs/ news/ mappings/
@@ -292,7 +292,7 @@ ai-intelligence-ingestion-pipeline/
 $ pytest -q
 ........................................................................ [ 52%]
 ......................................................................  [100%]
-141 passed, 10 warnings in ~19s
+145 passed, 10 warnings in ~18s
 ```
 
 | Area | Test file(s) |
@@ -303,7 +303,7 @@ $ pytest -q
 | Chunking (token budgeting, 413 shrink) | `test_chunking.py` |
 | Retry/backoff/jitter | `test_retry.py` |
 | Deduplication | `test_dedup.py`, `test_checkpoint.py` |
-| Pricing heuristic (incl. path-guessing, HTTP fallback) | `test_product_pricing.py` |
+| Pricing heuristic (incl. path-guessing, HTTP fallback, multi-word negation handling) | `test_product_pricing.py` |
 | Mapping-log cross-process dedup | `test_mapping_log.py` |
 | YC candidate-pool filtering | `test_yc_startups.py` |
 | Bounded concurrency & failure isolation | `test_crawler_base.py` |
@@ -394,7 +394,7 @@ raw_name,canonical_name,method,confidence,source_url
 Jasper.ai,Jasper,alias,100.0,https://www.ycombinator.com/companies/jasper-ai
 ```
 
-Alias resolution, not fuzzy — `Jasper.ai` is a declared alias of the canonical `Jasper` in the 55-entity seed table (`src/entity_resolution/seed_data.py`). This is 100% confidence by design, not a string-similarity guess.
+Alias resolution, not fuzzy — `Jasper.ai` is a declared alias of the canonical `Jasper` in the 56-entity seed table (`src/entity_resolution/seed_data.py`). This is 100% confidence by design, not a string-similarity guess.
 </details>
 
 ## Key Engineering Decisions
@@ -411,7 +411,7 @@ Alias resolution, not fuzzy — `Jasper.ai` is a declared alias of the canonical
 
 **Why checkpointing at the item level, not the batch level.** A batch-level checkpoint ("pipeline X finished") can't resume a killed run without redoing work already done. Per-item checkpointing (`namespace`, `item_id`) means a crash after processing 900 of 1,000 candidates resumes at item 901, not item 1 — essential once a single run's wall-clock time is measured in tens of minutes.
 
-**Why Playwright is documented but not wired into a default source.** None of the five news sources, five job boards, or other configured sources in this repository are JavaScript-rendered or Cloudflare/Datadome-protected — every one is an official API, an RSS/Atom feed, or a statically-published open dataset. Building and shipping unused browser-automation code against sources that don't need it would be exactly the kind of premature abstraction this codebase otherwise avoids. The legitimate strategy for a genuinely protected source — Playwright with a persistent context, per-domain rate limiting, `robots.txt` compliance, falling back to an official API or alternative source rather than escalating to CAPTCHA-solving — is documented in [architecture.pdf](architecture.pdf) and the [Trade-offs](#trade-offs-and-limitations) section below.
+**Why Playwright is documented but not wired into a default source.** None of the five news sources, five job boards, or other configured sources in this repository are JavaScript-rendered or Cloudflare/Datadome-protected — every one is an official API, an RSS/Atom feed, or a statically-published open dataset. Building and shipping unused browser-automation code against sources that don't need it would be exactly the kind of premature abstraction this codebase otherwise avoids. The legitimate strategy for a genuinely protected source, for the record: Playwright with a persistent context, per-domain rate limiting, `robots.txt` compliance, falling back to an official API or alternative source rather than escalating to CAPTCHA-solving.
 
 ## Trade-offs and Limitations
 
@@ -429,6 +429,8 @@ Stated plainly — nothing here is hidden, and nothing below was worked around b
 **A real platform limitation found while wiring up Google Sheets, not by inspection:** a GCP service account under a personal (non-Workspace) Google account has no Drive storage quota of its own, so `client.create()` (creating a brand-new spreadsheet) fails with `403: Drive storage quota exceeded` regardless of code correctness — Google's documented fix is to have the file's actual owner create it and share it with the service account instead, which only exercises the `client.open_by_key()` path. Auditing that path found a real, separate bug: `spreadsheet.share(...)` (needed to make the sheet public) was only ever called on the newly-created-spreadsheet branch, never on the open-by-key branch, so a sheet supplied via `GOOGLE_SHEET_ID` silently kept whatever privacy its owner left it at. Fixed by calling `.share()` unconditionally, with a regression test covering both branches (`test_google_sheets.py`). A second issue surfaced immediately after: that call itself 404'd under the `drive.file` OAuth scope this code originally requested — `drive.file` can read/write a shared file's contents but Drive silently refuses to let it change that file's *permissions*, confirmed by making the identical Drive API call succeed under plain `drive` scope. Fixed by widening the requested scope; see the comment above `_SCOPES` in `src/export/google_sheets.py` for the full diagnosis.
 
 **A real bug found by auditing real output, not by inspection:** entity resolution's fuzzy-match threshold was originally 90%. Auditing every fuzzy match the resolver had ever produced against the actual committed dataset found **8 matches — and all 8 were false merges of genuinely different real companies** (confirmed against their actual websites and one-liners): `Shape`/`Shaped`/`Sharpe`, `Sierra`/`Serra`, `Aluna`/`Alguna`, `Besimple AI`/`Simple AI`, `Lever`/`Clever`, `Tella`/`Trella`, and `Cair Health`/`Caire Health` at 95.65% — above even a first attempted fix of 95%. The threshold is now 97%, chosen with margin above the highest false positive actually observed; all 8 cases are permanent regression tests, and all 8 already-shipped false merges were corrected in the committed data. Full detail, including the reasoning for why precision was prioritized over recall here, is in [docs/LIMITATIONS.md](docs/LIMITATIONS.md).
+
+**A real bug found by testing the classifier directly, not by inspection:** the pricing heuristic's negation check (`_has_unnegated_match` in `src/extractors/product_pricing.py`) only recognized a negation word when it sat *immediately* next to the matched phrase (e.g. "**no** free tier"). Realistic phrasing almost always has a verb and article in between — "we do **not offer a** free tier," "we do **not have a** free plan" — and every one of those fell through undetected, so a page that explicitly said it had no free tier but did show a real price could be misclassified `FREEMIUM` instead of `PAID`. Fixed by widening the negation pattern to tolerate any number of intervening words within the same (slightly enlarged, 20→30 char) lookback window, while still stopping at a sentence break so an unrelated negation elsewhere can't blank out a genuine positive mention — both directions are now regression tests in `test_product_pricing.py`. Unlike the entity-resolution and Google Sheets fixes above, **the already-shipped 234 `FREEMIUM`-classified products were not individually re-audited**: the raw page text used at classification time isn't persisted anywhere, only the final `pricingModel` value, so identifying which (if any) of those 234 were affected would require re-fetching all 1,717 live product pages rather than checking a log. The fix prevents new instances; it does not retroactively verify old ones.
 
 **Scope choice, not a bug:** Products required supplementing the AI-tagged YC candidate pool (1,923 companies) with the full ~6,200-company directory to clear 1,000 real classifications — the AI-tagged pool alone yielded 768 after real-world DNS failures, TLS errors, and pages with no confident pricing signal. That means some of the 1,717 products are YC companies outside a strict "AI startup" reading. This was a deliberate volume-over-scope trade, not an accident — see `docs/LIMITATIONS.md` for the numbers.
 
@@ -460,7 +462,7 @@ Quality stats (this run):
 | Source code (`src/`) | Complete |
 | README | Complete |
 | Architecture document (`architecture.pdf`, 2 pages) | Complete |
-| Automated tests | 141/141 passing |
+| Automated tests | 145/145 passing |
 | Data exports (CSV + XLSX, 6 tabs) | Complete |
 | Google Sheets export | Complete — [live public sheet](https://docs.google.com/spreadsheets/d/1_4GTqUc0yMM3DBjQQNQjFsYgj5ihFbFIjrjFj2qnAug/edit), all 6 tabs populated and verified |
 | Entity mapping log | Complete — 2,453 rows, 0 known false merges remaining |

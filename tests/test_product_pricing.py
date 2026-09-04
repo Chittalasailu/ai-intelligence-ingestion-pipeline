@@ -26,6 +26,44 @@ def test_classify_enterprise_contact_sales():
     assert classify_from_text(text) == PricingModel.ENTERPRISE
 
 
+def test_negation_direct_word_suppresses_free_signal():
+    # "no X" immediately adjacent to the match already worked before this
+    # fix and must keep working.
+    text = "There is no free tier available. Plans start at $29/month."
+    assert classify_from_text(text) == PricingModel.PAID
+
+
+def test_negation_multi_word_phrasing_suppresses_free_signal():
+    # Regression: the negation regex previously tolerated only a single word
+    # between the trigger ("not") and the matched phrase ("free tier"), so
+    # real phrasing like "we do not offer a free tier" fell through
+    # undetected and the free signal registered anyway -- misclassifying an
+    # explicitly no-free-tier page as FREEMIUM instead of PAID.
+    cases = [
+        "We do not have a free tier. Plans start at $29/month.",
+        "We do not offer a free tier. Paid plans start at $29/month.",
+        "We do not provide a free plan. Paid plans start at $29/month.",
+        "This product does not include any free tier. Paid plans start at $29/month.",
+    ]
+    for text in cases:
+        assert classify_from_text(text) == PricingModel.PAID, f"failed to suppress free signal in: {text!r}"
+
+
+def test_negation_does_not_suppress_unrelated_positive_in_a_different_sentence():
+    # The negation lookback must stop at a sentence break, not just fail to
+    # find one within a fixed distance -- a "not" earlier in an unrelated
+    # sentence must not blank out a real, separate free-tier mention.
+    text = "Not sure which plan is right for you? Try our free tier today, no strings attached."
+    assert classify_from_text(text) == PricingModel.FREE
+
+
+def test_classify_paid_and_free_wording_unaffected_by_negation_fix():
+    # Existing positive-signal behavior (no negation involved at all) must
+    # be unchanged by widening the negation pattern.
+    assert classify_from_text("Our tool is free forever, no credit card required.") == PricingModel.FREE
+    assert classify_from_text("Our Pro plan is $29 per month, billed annually.") == PricingModel.PAID
+
+
 def test_classify_ambiguous_returns_none():
     text = "Welcome to our homepage. We build great software for teams everywhere."
     assert classify_from_text(text) is None

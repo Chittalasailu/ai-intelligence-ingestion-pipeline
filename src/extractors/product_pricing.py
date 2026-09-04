@@ -34,14 +34,19 @@ _ENTERPRISE_PATTERNS = [r"\bcontact sales\b", r"\btalk to sales\b", r"\bbook a d
 _FREE_RE = re.compile("|".join(_FREE_TIER_PATTERNS), re.IGNORECASE)
 _PAID_RE = re.compile("|".join(_PAID_PRICE_PATTERNS), re.IGNORECASE)
 _ENTERPRISE_RE = re.compile("|".join(_ENTERPRISE_PATTERNS), re.IGNORECASE)
-_NEGATION_RE = re.compile(r"\b(no|not|without|n't have|never)\s+\w*\s*$", re.IGNORECASE)
-_NEGATION_LOOKBACK_CHARS = 20
+_NEGATION_RE = re.compile(r"\b(no|not|without|n't have|never)\s+(?:\w+\s+)*\w*\s*$", re.IGNORECASE)
+_NEGATION_LOOKBACK_CHARS = 30
 
 
 def _has_unnegated_match(pattern: re.Pattern, text: str) -> bool:
     """True if `pattern` matches somewhere NOT immediately preceded by a
     negation word — "no free tier available" must not register as a free
-    signal just because the words "free tier" appear in it.
+    signal just because the words "free tier" appear in it. The negation
+    word can be followed by other plain words before the match ("does not
+    *offer a* free tier") — (?:\\w+\\s+)* allows any number of them — but a
+    punctuation/sentence break in between still stops the match, so a
+    negation in one sentence can't suppress an unrelated positive mention
+    later in the same lookback window.
     """
     for match in pattern.finditer(text):
         preceding = text[max(0, match.start() - _NEGATION_LOOKBACK_CHARS) : match.start()]

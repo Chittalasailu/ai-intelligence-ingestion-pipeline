@@ -148,8 +148,8 @@ story.append(Paragraph(
     "Deterministic, ordered, and fully audited: Unicode NFKD normalize → lowercase → strip punctuation → collapse "
     "whitespace → strip a trailing <i>legal</i> suffix (Inc/LLC/Corp/GmbH, iteratively) — deliberately excluding "
     "brand words like \"Labs\"/\"Technologies\", since auto-stripping those raises false-merge risk. Exact match "
-    "against a 55-entity seed+alias table, then alias table, then rapidfuzz token_sort_ratio fuzzy match at a "
-    "confidence threshold (default 90) — below threshold, the input becomes its own new canonical entity rather "
+    "against a 56-entity seed+alias table, then alias table, then rapidfuzz token_sort_ratio fuzzy match at a "
+    "confidence threshold (default 97) — below threshold, the input becomes its own new canonical entity rather "
     "than being glued onto something unrelated. Every resolution, including \"no match, new canonical,\" is written "
     "to an audit log (raw name, canonical name, method, confidence, source URL, timestamp) in both CSV and the "
     "database, so the log is a complete trail, not just the interesting cases.", body,
