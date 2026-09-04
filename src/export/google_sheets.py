@@ -1,13 +1,17 @@
-"""Google Sheets export. Requires one-time setup (see
-docs/GOOGLE_SHEETS_SETUP.md): a GCP service account with Sheets+Drive API
-access, its JSON key at GOOGLE_SERVICE_ACCOUNT_FILE, and that service
-account's email added as an Editor on the target spreadsheet (or leave
-GOOGLE_SHEET_ID blank to have this script create a new spreadsheet and
-print its URL).
+"""Google Sheets export. Two supported credential paths, tried in order:
 
-Without credentials this raises SheetsNotConfigured — callers (scripts/
-export_to_sheets.py) catch that and fall back to "here are your CSV/XLSX
-files, upload them manually" rather than crashing the whole run.
+1. A GCP service account JSON key at GOOGLE_SERVICE_ACCOUNT_FILE (see
+   docs/GOOGLE_SHEETS_SETUP.md) — its email needs Editor access on the
+   target spreadsheet, or leave GOOGLE_SHEET_ID blank to have this script
+   create a new spreadsheet under the service account itself.
+2. Application Default Credentials (ADC) — e.g. from
+   `gcloud auth application-default login --scopes=...` run once against
+   the user's own Google account. No JSON key file needed; the resulting
+   spreadsheet is created directly in that Google account's own Drive.
+
+Without either, this raises SheetsNotConfigured — callers (scripts/
+export_data.py) catch that and fall back to "here are your CSV/XLSX files,
+upload them manually" rather than crashing the whole run.
 """
 from __future__ import annotations
 
@@ -18,6 +22,8 @@ from src.export.tabular import TAB_HEADERS
 from src.utils.logging_setup import get_logger
 
 logger = get_logger(__name__)
+
+_SCOPES = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive.file"]
 
 
 class SheetsNotConfigured(Exception):
@@ -34,6 +40,26 @@ def _stringify_row(row: dict[str, Any], headers: list[str]) -> list[str]:
     return out
 
 
+def _resolve_credentials(service_account_file: str):
+    """Returns (credentials, method) or (None, None) if nothing usable is
+    configured. Never raises for a missing/invalid ADC file — that's an
+    expected "not set up" state, not an error.
+    """
+    if Path(service_account_file).is_file():
+        from google.oauth2.service_account import Credentials
+
+        return Credentials.from_service_account_file(service_account_file, scopes=_SCOPES), "service_account"
+
+    try:
+        import google.auth
+
+        creds, _project = google.auth.default(scopes=_SCOPES)
+        return creds, "application_default"
+    except Exception as e:  # noqa: BLE001 - google.auth raises its own DefaultCredentialsError type
+        logger.info("adc_not_available", error=str(e))
+        return None, None
+
+
 def push_to_google_sheets(
     tabs: dict[str, list[dict[str, Any]]],
     service_account_file: str,
@@ -41,17 +67,20 @@ def push_to_google_sheets(
     sheet_title: str = "FrontierAtlas Intelligence Pipeline Output",
 ) -> str:
     """Returns the spreadsheet URL on success. Raises SheetsNotConfigured if
-    the service-account file is missing (i.e. the one-time credential step
-    documented in docs/GOOGLE_SHEETS_SETUP.md hasn't been done yet).
+    neither a service-account file nor Application Default Credentials are
+    available — i.e. neither one-time credential step documented in
+    docs/GOOGLE_SHEETS_SETUP.md has been done yet.
     """
-    if not Path(service_account_file).is_file():
-        raise SheetsNotConfigured(f"No service account file at {service_account_file}. See docs/GOOGLE_SHEETS_SETUP.md.")
+    creds, method = _resolve_credentials(service_account_file)
+    if creds is None:
+        raise SheetsNotConfigured(
+            f"No service account file at {service_account_file} and no Application Default Credentials "
+            "available (`gcloud auth application-default login`). See docs/GOOGLE_SHEETS_SETUP.md."
+        )
+    logger.info("google_sheets_auth_method", method=method)
 
     import gspread
-    from google.oauth2.service_account import Credentials
 
-    scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive.file"]
-    creds = Credentials.from_service_account_file(service_account_file, scopes=scopes)
     client = gspread.authorize(creds)
 
     if sheet_id:
