@@ -14,7 +14,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import JSON, Boolean, DateTime, Float, Integer, String, UniqueConstraint
+from sqlalchemy import JSON, Boolean, DateTime, Float, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -90,6 +90,12 @@ class JobORM(Base):
     is_remote: Mapped[bool] = mapped_column(Boolean)
     job_date: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     collected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    # Full extracted posting text (Phase II "Full-Text Content" requirement).
+    # Deliberately excluded from the CSV/Sheets tab (src/export/tabular.py
+    # TAB_HEADERS) for spreadsheet readability, but preserved here so the
+    # extraction work — and the role_family classification derived from it
+    # — is traceable to real content, not thrown away after use.
+    description_text: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
 
 class NewsORM(Base):
@@ -106,6 +112,8 @@ class NewsORM(Base):
     summary: Mapped[str] = mapped_column(String(4096), default="")
     news_date: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     collected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    # Full extracted article text — same reasoning as JobORM.description_text above.
+    full_text: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
 
 class EntityMappingORM(Base):

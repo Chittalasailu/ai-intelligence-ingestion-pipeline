@@ -100,6 +100,7 @@ class JobContent(BaseModel):
     role_family: str
     title: Optional[str] = None
     url: Optional[HttpUrl] = None
+    description: Optional[str] = None
 
 
 class JobRecord(BaseModel):

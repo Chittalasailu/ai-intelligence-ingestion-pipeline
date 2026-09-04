@@ -371,10 +371,12 @@ than a bug to paper over.
 |---|---:|---|
 | Startups | 1,247 | YC directory, AI-tagged, real `team_size` where published |
 | Products | 768 | Live company-website pricing classification (1,961 candidate sites fetched; see Limitations) |
-| Research Papers | 1,005 | arXiv + Hugging Face Daily Papers, real GitHub links/stars where evidenced |
-| News | 27 | 5 RSS feeds, strictly ≤24h old |
+| Research Papers | 1,000 | arXiv + Hugging Face Daily Papers, real GitHub links/stars where evidenced |
+| News | 31 | 5 RSS feeds, strictly ≤24h old |
 | Jobs | 11 | 5 job boards, strictly ≤24h old |
 | Entity Mapping Log | 1,532 | Every resolution performed above |
+
+(These are a snapshot from the run that produced the committed `data/*.csv` files. arXiv, RSS, and job-board content changes continuously — a fresh `python -m src.main --pipeline all` run will get different, still-real, numbers in the same range for News/Jobs and will only grow Startups/Products/Research Papers, never shrink them, since export always reflects the full database.)
 
 ## Testing
 

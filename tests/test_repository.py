@@ -4,9 +4,14 @@ only surfaces when it actually talks to a driver.
 """
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from src.entity_resolution.resolver import EntityResolver, MappingLogEntry
+from src.schemas.models import JobRecord, NewsRecord
 from src.storage.db import create_engine, init_db, make_session_factory
-from src.storage.repository import get_all_entity_mapping_rows, insert_entity_mapping
+from src.storage.models import JobORM, NewsORM
+from src.storage.repository import get_all_entity_mapping_rows, insert_entity_mapping, insert_job, insert_news
+from sqlalchemy import select
 
 
 async def _make_session_factory(tmp_path):
@@ -48,4 +53,63 @@ async def test_insert_entity_mapping_dedups_same_resolution(tmp_path):
     assert second is False  # same raw/canonical/method -> duplicate, even from a "different" source URL
     rows = await get_all_entity_mapping_rows(session_factory)
     assert len(rows) == 1
+    await engine.dispose()
+
+
+async def test_insert_job_persists_full_description_text(tmp_path):
+    # Regression test: the job pipeline fetched and cleaned full posting
+    # text (used to classify role_family) but JobORM had no column to put
+    # it in, so the Phase II "full-text content" extraction was silently
+    # discarded after use instead of being preserved. Caught by inspecting
+    # the database directly, not by any prior test — every schema test used
+    # payloads that never checked whether this field survived to storage.
+    engine, session_factory = await _make_session_factory(tmp_path)
+    record = JobRecord.model_validate({
+        "schemaVersion": "1.0",
+        "recordType": "JOB",
+        "source": {"name": "RemoteOK", "url": "https://remoteok.com/api"},
+        "content": {
+            "company": "Acme AI",
+            "date": datetime.now(timezone.utc).isoformat(),
+            "is_remote": True,
+            "role_family": "Engineering",
+            "title": "ML Engineer",
+            "description": "Full job posting text goes here, in full.",
+        },
+        "collectedAt": datetime.now(timezone.utc).isoformat(),
+    })
+
+    async with session_factory() as session:
+        inserted = await insert_job(session, record, "Acme AI")
+    assert inserted is True
+
+    async with session_factory() as session:
+        row = (await session.execute(select(JobORM))).scalar_one()
+    assert row.description_text == "Full job posting text goes here, in full."
+    await engine.dispose()
+
+
+async def test_insert_news_persists_full_article_text(tmp_path):
+    engine, session_factory = await _make_session_factory(tmp_path)
+    record = NewsRecord.model_validate({
+        "schemaVersion": "1.0",
+        "recordType": "NEWS",
+        "source": {"name": "TechCrunch AI", "url": "https://techcrunch.com/foo"},
+        "content": {
+            "headline": "Big AI news",
+            "date": datetime.now(timezone.utc).isoformat(),
+            "summary": "Short summary.",
+            "full_text": "The complete cleaned article body goes here.",
+            "url": "https://techcrunch.com/foo",
+        },
+        "collectedAt": datetime.now(timezone.utc).isoformat(),
+    })
+
+    async with session_factory() as session:
+        inserted = await insert_news(session, record)
+    assert inserted is True
+
+    async with session_factory() as session:
+        row = (await session.execute(select(NewsORM))).scalar_one()
+    assert row.full_text == "The complete cleaned article body goes here."
     await engine.dispose()

@@ -98,6 +98,7 @@ async def insert_job(session: AsyncSession, record: JobRecord, canonical_company
         is_remote=record.content.is_remote,
         job_date=record.content.date,
         collected_at=record.collectedAt,
+        description_text=record.content.description,
     )
     return await _commit_or_duplicate(session, orm_obj)
 
@@ -114,6 +115,7 @@ async def insert_news(session: AsyncSession, record: NewsRecord) -> bool:
         summary=record.content.summary or "",
         news_date=record.content.date,
         collected_at=record.collectedAt,
+        full_text=record.content.full_text,
     )
     return await _commit_or_duplicate(session, orm_obj)
 

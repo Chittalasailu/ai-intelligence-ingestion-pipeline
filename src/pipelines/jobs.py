@@ -106,6 +106,7 @@ async def run_jobs_pipeline(ctx: RunContext) -> list[dict[str, Any]]:
                 "role_family": role_family,
                 "title": job.title,
                 "url": job.url or None,
+                "description": job.description_text or None,
             },
             "collectedAt": utc_now().isoformat(),
         }
